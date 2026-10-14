@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useStore } from '../store.jsx';
@@ -9,12 +9,10 @@ import Icon from '../components/Icon.jsx';
 import { fmtDate } from '../utils.js';
 import { getTeachers, createTeacher, updateTeacher, deleteTeacher } from '../services/api.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const EMPTY = { last_name: '', first_name: '', start_date: '', phone: '' };
 const PAGE_SIZE = 10;
-
 
 const errMsg = (err) =>
   err?.response?.data?.message || err?.message || 'حدث خطأ غير متوقع';
@@ -36,7 +34,7 @@ function TeacherForm({ initial, onSubmit, onCancel, isSubmitting }) {
       start_date: initial.start_date ? String(initial.start_date).slice(0, 10) : '',
     },
     validationSchema: schema,
-     onSubmit: (values) => {
+    onSubmit: (values) => {
       onSubmit({ id: initial.id, payload: values });
     },
   });
@@ -78,33 +76,36 @@ export default function Teachers() {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['teachers'] });
+  // Refresh this page's data and every page that depends on teachers.
+  // Keys are case-sensitive: must match the other pages exactly.
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    queryClient.invalidateQueries({ queryKey: ['groups'] });
+  };
 
-
-  const {data : teachers = [] } = useQuery({
-    queryKey:["teachers"],
-    queryFn: async () => (await getTeachers()).data
-  })
+  const { data: teachers = [] } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => (await getTeachers()).data,
+  });
 
   const saveMutation = useMutation({
-      mutationFn: ({ id, payload }) =>
-        id ? updateTeacher(id, payload) : createTeacher(payload),
-      onSuccess: () => {
-        setEditing(null);
-        invalidate();
-      },
-      onError: (err) => window.alert(errMsg(err)),
-    });
+    mutationFn: ({ id, payload }) =>
+      id ? updateTeacher(id, payload) : createTeacher(payload),
+    onSuccess: () => {
+      setEditing(null);
+      invalidate();
+    },
+    onError: (err) => window.alert(errMsg(err)),
+  });
 
-      const deleteMutation = useMutation({
-        mutationFn: (id) => deleteTeacher(id),
-        onSuccess: () => {
-          setToDelete(null);
-          invalidate();
-        },
-        onError: (err) => window.alert(errMsg(err)),
-      });
-
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteTeacher(id),
+    onSuccess: () => {
+      setToDelete(null);
+      invalidate();
+    },
+    onError: (err) => window.alert(errMsg(err)),
+  });
 
   const list = useMemo(
     () =>
@@ -114,21 +115,20 @@ export default function Teachers() {
     [teachers, q]
   );
 
+  const pagination = useMemo(() => {
+    const total = list.length;
+    return { total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  }, [list]);
 
-    const pagination = useMemo(() => {
-      const total = list.length;
-      return { total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
-    }, [list]);
-  
-    // Keep page valid (e.g. after deleting the last item on the last page)
-    useEffect(() => {
-      if (page > pagination.totalPages) setPage(pagination.totalPages);
-    }, [page, pagination.totalPages]);
-  
-    const pagedList = useMemo(
-      () => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-      [list, page]
-    );
+  // Keep page valid (e.g. after deleting the last item on the last page)
+  useEffect(() => {
+    if (page > pagination.totalPages) setPage(pagination.totalPages);
+  }, [page, pagination.totalPages]);
+
+  const pagedList = useMemo(
+    () => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [list, page]
+  );
 
   return (
     <>
@@ -181,7 +181,8 @@ export default function Teachers() {
           </tbody>
         </table>
       </div>
-       {pagination.totalPages > 1 && (
+
+      {pagination.totalPages > 1 && (
         <div className="pagination">
           <button
             className="btn"
@@ -195,32 +196,33 @@ export default function Teachers() {
           </span>
           <button
             className="btn"
-            onClick={() =>
-              setPage((p) => Math.min(pagination.totalPages, p + 1))
-            }
+            onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
             disabled={page >= pagination.totalPages}
           >
             التالي
           </button>
         </div>
       )}
-       {toDelete && (
-              <ConfirmModal
-                title="حذف المعلم"
-                message={`هل تريد حذف "${toDelete.first_name} ${toDelete.last_name}"؟`}
-                confirmText="حذف"
-                danger
-                onClose={() => setToDelete(null)}
-                onConfirm={() => deleteMutation.mutate(toDelete.id)}
-              />
-            )}
+
+      {toDelete && (
+        <ConfirmModal
+          title="حذف المعلم"
+          message={`هل تريد حذف "${toDelete.first_name} ${toDelete.last_name}"؟`}
+          confirmText="حذف"
+          danger
+          onClose={() => setToDelete(null)}
+          onConfirm={() => deleteMutation.mutate(toDelete.id)}
+        />
+      )}
 
       {editing && (
         <Modal title={editing.id ? 'تعديل بيانات المعلم' : 'إضافة معلم'} onClose={() => setEditing(null)}>
-          <TeacherForm initial={editing}
-           isSubmitting={saveMutation.isPending}
-          onSubmit={(vars) => saveMutation.mutate(vars)}
-           onCancel={() => setEditing(null)} />
+          <TeacherForm
+            initial={editing}
+            isSubmitting={saveMutation.isPending}
+            onSubmit={(vars) => saveMutation.mutate(vars)}
+            onCancel={() => setEditing(null)}
+          />
         </Modal>
       )}
     </>

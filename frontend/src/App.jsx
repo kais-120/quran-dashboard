@@ -14,14 +14,19 @@ import Absences from './pages/Absences.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Donations from './pages/Donations.jsx';
 import BackupPage from './pages/BackupPage.jsx';
+import Users from './pages/Users.jsx';
 
 function RequireAuth({ children }) {
-  const { isAuth } = useStore();
+  const { isAuth, authLoading } = useStore();
+  if (authLoading) return null; // or a spinner
   return isAuth ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
-  const { isAuth } = useStore();
+  const { isAuth, authLoading } = useStore();
+
+  if (authLoading) return null; // or a spinner
+
   return (
     <Routes>
       <Route path="/login" element={isAuth ? <Navigate to="/" replace /> : <Login />} />
@@ -43,6 +48,7 @@ export default function App() {
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/donations" element={<Donations />} />
         <Route path="/backup" element={<BackupPage />} />
+        <Route path="/users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

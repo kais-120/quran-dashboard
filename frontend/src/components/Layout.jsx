@@ -14,6 +14,7 @@ import {
   FaMoneyBillWave,
   FaDatabase,
   FaGraduationCap,
+  FaUserCog,
 } from "react-icons/fa";
 
 const NAV = [
@@ -22,7 +23,7 @@ const NAV = [
   { to: "/teachers", label: "المعلمون", icon: IoMdBook },
   { to: "/groups", label: "الأفواج", icon: MdGroups2 },
   { to: "/registrations", label: "التسجيلات", icon: FaClipboardCheck },
-
+  { to: "/users", label: "المستخدمون", icon: FaUserCog },
   { to: "/activities", label: "النشاطات", icon: FaCalendarCheck },
   { to: "/courses", label: "الدورات", icon: FaGraduationCap },
   { to: "/absences", label: "الغيابات", icon: FaUserClock },
@@ -37,7 +38,7 @@ const NAV = [
 ];
 
 export default function Layout() {
-  const { settings, logout } = useStore();
+  const { data, logout } = useStore();
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
@@ -49,8 +50,8 @@ export default function Layout() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">۞</span>
           <div>
-            <strong>{settings.associationName}</strong>
-            <small>{settings.schoolYear}</small>
+            <strong>{data.association_name}</strong>
+            <small>{data.school_year}</small>
           </div>
         </div>
         <nav>

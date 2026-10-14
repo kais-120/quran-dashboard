@@ -244,7 +244,8 @@ exports.getTeachersNotPaidCurrentMonth = async (req, res) => {
         t."last_name",
         t.phone
       FROM teachers t
-      WHERE NOT EXISTS (
+      WHERE t.is_delete = false
+      AND NOT EXISTS (
         SELECT 1
         FROM teacher_payment tp
         WHERE tp.teacher_id = t.id

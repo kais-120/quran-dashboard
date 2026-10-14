@@ -26,6 +26,11 @@ const Teacher = sequelize.define(
       type: DataTypes.STRING(20),
       allowNull: false,
     },
+     is_delete: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue:false
+    },
   },
   {
     tableName: "teachers",

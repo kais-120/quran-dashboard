@@ -12,6 +12,8 @@ const CourseStudent = sequelize.define(
         model: "courses",
         key: "id",
       },
+      onDelete:"CASCADE",
+      onUpdate:"CASCADE"
     },
     student_id: {
       type: DataTypes.BIGINT,
@@ -20,6 +22,8 @@ const CourseStudent = sequelize.define(
         model: "students",
         key: "id",
       },
+      onDelete:"CASCADE",
+      onUpdate:"CASCADE"
     },
   },
   {

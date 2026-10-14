@@ -1,15 +1,18 @@
 const { validationResult } = require("express-validator");
 const Student = require("../models/Student");
-const { StudentGroup, Group } = require("../models");
+const { StudentGroup, Group, CourseStudent } = require("../models");
 const { Op, QueryTypes } = require("sequelize");
 const sequelize = require("../config/db");
 const Setting = require("../models/Setting");
 const Subscription = require("../models/Subscription");
-const SubscriptionPayment = require("../models/SubscriptionPayment");
 
 exports.getStudents = async (req, res) => {
   try {
     const students = await Student.findAll({
+      where:{
+        is_delete:false,
+
+      },
       include:[
         {
           model:StudentGroup,
@@ -41,6 +44,7 @@ exports.getStudentsWithoutGroup = async (req, res) => {
   try {
     const students = await Student.findAll({
       where: {
+        is_delete:false,
         id: {
           [Op.notIn]: sequelize.literal("(SELECT student_id FROM student_groups)"),
         },
@@ -86,13 +90,14 @@ exports.createStudent = [
     }
 
     try {
-      const { name, father_name, father_phone, birthdate,group_id } = req.body;
+      const { name, father_name, father_phone, birthdate,group_id,memorized_hizb } = req.body;
 
       const student = await Student.create({
         name,
         father_name,
         father_phone,
         birthdate,
+        memorized:memorized_hizb
       });
       const today = new Date()
       await StudentGroup.create({student_id:student.id,group_id});
@@ -131,15 +136,23 @@ exports.updateStudent = [
                   message: "Student not found.",
         });
       }
+      const studentGroup = await StudentGroup.findOne({where: {student_id:student.id}})
 
-      const { name, father_name, father_phone, birthdate } = req.body;
+      const { name, father_name, father_phone, birthdate,memorized_hizb,group_id } = req.body;
 
       await student.update({
         ...(name !== undefined && { name }),
         ...(father_name !== undefined && { father_name }),
         ...(father_phone !== undefined && { father_phone }),
         ...(birthdate !== undefined && { birthdate }),
+        ...(memorized_hizb !== undefined && {memorized:memorized_hizb }),
       });
+      if(!studentGroup && group_id){
+        await StudentGroup.create({group_id,student_id:student.id})
+      }
+      else if(studentGroup && group_id){
+        studentGroup.update({group_id})
+      }
 
       return res.status(200).json({
         message: "Student updated successfully.",
@@ -165,7 +178,17 @@ exports.deleteStudent = async (req, res) => {
       });
     }
 
-    await student.destroy();
+        await student.update({is_delete:true});
+        const group = await StudentGroup.findOne({where : {student_id:student.id}})
+        const course = await CourseStudent.findOne({where : {student_id:student.id}})
+        if((group)){
+          await group.destroy()
+        }
+        if(course){
+          await course.destroy()
+        }
+
+
 
     return res.status(200).json({
       message: "Student deleted successfully.",
@@ -192,7 +215,8 @@ exports.getStudentsNotPaidCurrentMonth = async (req, res) => {
       FROM students s
       INNER JOIN subscriptions sub
         ON sub.student_id = s.id
-      WHERE NOT EXISTS (
+      WHERE  s.is_delete = false
+      AND NOT EXISTS (
         SELECT 1
         FROM subscription_payment sp
         WHERE sp.subscription_id = sub.id

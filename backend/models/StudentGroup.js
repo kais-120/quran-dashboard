@@ -16,6 +16,8 @@ const StudentGroup = sequelize.define(
         model: "students",
         key: "id",
       },
+      onDelete:"CASCADE",
+      onUpdate:"CASCADE"
     },
     group_id: {
       type: DataTypes.BIGINT,
@@ -24,6 +26,8 @@ const StudentGroup = sequelize.define(
         model: "groups",
         key: "id",
       },
+      onDelete:"CASCADE",
+      onUpdate:"CASCADE"
     },
   },
   {

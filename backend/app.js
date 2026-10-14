@@ -14,6 +14,10 @@ const ExpenseRoutes = require("./routes/ExpenseRoutes")
 const SubscriptionRoutes = require("./routes/SubscriptionRoutes")
 const DashboardRoutes = require("./routes/DashboardRoutes")
 const TeacherPaymentRoutes = require("./routes/TeacherPaymentRoutes")
+const UserRoutes = require("./routes/UserRoutes")
+const BackupRoute = require("./routes/BackupRoute")
+
+
 
 
 
@@ -31,6 +35,10 @@ router.use("/expense", ExpenseRoutes);
 router.use("/subscription", SubscriptionRoutes);
 router.use("/dashboard", DashboardRoutes);
 router.use("/teacher-payment", TeacherPaymentRoutes);
+router.use("/user", UserRoutes);
+router.use("/backup", BackupRoute);
+
+
 
 
 

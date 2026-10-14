@@ -1,5 +1,5 @@
 // src/pages/Expenses.jsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,8 +14,11 @@ import {
   updateExpense,
   deleteExpense,
 } from '../services/api.js';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const PAGE_SIZE = 10;
+
 
 const EMPTY = { title: '', amount: '', date: today(), note: '' };
 
@@ -90,6 +93,10 @@ export default function Expenses() {
   const [q, setQ] = useState('');
   const [month, setMonth] = useState('');
   const [editing, setEditing] = useState(null);
+  const [page, setPage] = useState(1);
+  const [toDelete, setToDelete] = useState(null);
+
+
 
   const {
     data: expenses = [],
@@ -116,7 +123,11 @@ export default function Expenses() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteExpense(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setToDelete(null)
+      invalidate();
+    }
+    ,
     onError: (e) => console.error('error', e),
   });
 
@@ -140,10 +151,6 @@ export default function Expenses() {
     }
   };
 
-  const del = (x) => {
-    if (!window.confirm(`حذف المصروف «${x.title}»؟`)) return;
-    deleteMutation.mutate(x.id);
-  };
 
   const emptyMessage = isLoading
     ? 'جارٍ التحميل...'
@@ -152,6 +159,23 @@ export default function Expenses() {
     : expenses.length
     ? 'لا توجد نتائج مطابقة للبحث.'
     : 'لم تتم إضافة أي مصروف بعد. اضغط «إضافة مصروف» للبدء.';
+
+    const pagination = useMemo(() => {
+          const total = list.length;
+          return { total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+        }, [list]);
+      
+        // Keep page valid (e.g. after deleting the last item on the last page)
+        useEffect(() => {
+          if (page > pagination.totalPages) setPage(pagination.totalPages);
+        }, [page, pagination.totalPages]);
+      
+        const pagedList = useMemo(
+          () => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+          [list, page]
+        );
+
+
 
   return (
     <>
@@ -187,7 +211,7 @@ export default function Expenses() {
             </tr>
           </thead>
           <tbody>
-            {list.map((x) => (
+            {pagedList.map((x) => (
               <tr key={x.id}>
                 <td className="strong">{x.title}</td>
                 <td><span className="num">{money(x.amount)}</span></td>
@@ -198,7 +222,7 @@ export default function Expenses() {
                   <button className="icon-btn" onClick={() => setEditing(x)} aria-label={`تعديل ${x.title}`}><Icon name="edit" /></button>
                   <button
                     className="icon-btn danger"
-                    onClick={() => del(x)}
+                    onClick={() => setToDelete(x)}
                     disabled={deleteMutation.isPending}
                     aria-label={`حذف ${x.title}`}
                   >
@@ -207,11 +231,11 @@ export default function Expenses() {
                 </td>
               </tr>
             ))}
-            {list.length === 0 && (
+            {pagedList.length === 0 && (
               <tr><td colSpan="6" className="empty">{emptyMessage}</td></tr>
             )}
           </tbody>
-          {list.length > 0 && (
+          {pagedList.length > 0 && (
             <tfoot>
               <tr>
                 <td className="strong">المجموع</td>
@@ -221,6 +245,41 @@ export default function Expenses() {
           )}
         </table>
       </div>
+
+      {pagination.totalPages > 1 && (
+        <div className="pagination">
+          <button
+            className="btn"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+          >
+            السابق
+          </button>
+          <span className="num">
+            {page} / {pagination.totalPages} ({pagination.total})
+          </span>
+          <button
+            className="btn"
+            onClick={() =>
+              setPage((p) => Math.min(pagination.totalPages, p + 1))
+            }
+            disabled={page >= pagination.totalPages}
+          >
+            التالي
+          </button>
+        </div>
+      )}
+
+       {toDelete && (
+              <ConfirmModal
+                title="حذف مصروف"
+                message={`هل تريد حذف مصروف "${toDelete.title}"؟.`}
+                confirmText="حذف"
+                danger
+                onClose={() => setToDelete(null)}
+                onConfirm={() => deleteMutation.mutate(toDelete.id)}
+              />
+            )}
 
       {editing && (
         <Modal title={editing.id ? 'تعديل المصروف' : 'إضافة مصروف'} onClose={() => setEditing(null)}>

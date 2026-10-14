@@ -252,7 +252,7 @@ export default function Groups() {
                 </td>
               </tr>
             ))}
-            {list.length === 0 && (
+            {pagedList.length === 0 && (
               <tr><td colSpan="5" className="empty">
                 {groups.length ? 'لا توجد نتائج مطابقة. غيّر البحث أو التصفية.' : 'لم تتم إضافة أي فوج بعد. اضغط «إضافة فوج» للبدء.'}
               </td></tr>

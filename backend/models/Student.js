@@ -19,9 +19,19 @@ const Student = sequelize.define(
     father_phone: {
       type: DataTypes.STRING(20),
     },
+    memorized: {
+  type: DataTypes.DECIMAL(4, 2),
+  allowNull: true,
+  defaultValue: 0,
+},
     birthdate: {
       type: DataTypes.DATEONLY,
       allowNull: false,
+    },
+    is_delete: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue:false
     },
   },
   {

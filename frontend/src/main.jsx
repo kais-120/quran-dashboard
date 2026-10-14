@@ -20,11 +20,11 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HashRouter>
-      <StoreProvider>
         <QueryClientProvider client={queryClient}>
+      <StoreProvider>
         <App />
-        </QueryClientProvider>
       </StoreProvider>
+        </QueryClientProvider>
     </HashRouter>
   </React.StrictMode>
 );

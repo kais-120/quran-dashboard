@@ -3,13 +3,11 @@ import { useStore } from '../store.jsx';
 import Icon from '../components/Icon.jsx';
 
 export default function Login() {
-  const { auth, settings } = useStore();
+  const { auth, data } = useStore();
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [show, setShow] = useState(false);
-  const [error, setError] = useState('');
-
-  
+  const [error, setError] = useState('');  
 
   const submit = (e) => {
     e.preventDefault();
@@ -20,7 +18,7 @@ export default function Login() {
     <div className="login">
       <section className="login-hero">
         <p className="login-verse">وَقُل رَّبِّ زِدْنِي عِلْمًا</p>
-        <p className="login-name">{settings.associationName}</p>
+        <p className="login-name">{data?.association_name}</p>
       </section>
 
       <section className="login-panel">
@@ -47,9 +45,7 @@ export default function Login() {
 
           <button className="btn primary block" type="submit">دخول</button>
 
-          {settings.adminPass === 'admin123' && (
-            <p className="hint">الحساب الافتراضي: <bdi dir="ltr">admin / admin123</bdi> — غيّره من صفحة الإعدادات.</p>
-          )}
+          
         </form>
       </section>
     </div>

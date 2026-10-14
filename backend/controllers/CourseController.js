@@ -223,7 +223,8 @@ exports.getStudentsWithoutActiveCourse = async (req, res) => {
         s.father_phone,
         s.birthdate
       FROM students s
-      WHERE NOT EXISTS (
+      WHERE s.is_delete = false
+      AND NOT EXISTS (
         SELECT 1
         FROM course_students cs
         INNER JOIN courses c ON c.id = cs.course_id

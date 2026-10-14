@@ -1,5 +1,5 @@
 // src/pages/Donations.jsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +36,9 @@ const DONOR_TYPES = {
   organization: 'جهة / مؤسسة',
   anonymous: 'مجهول',
 };
+
+const PAGE_SIZE = 10;
+
 
 const KINDS = {
   money: 'مبلغ مالي',
@@ -186,6 +189,8 @@ export default function Donations() {
   const [kind, setKind] = useState('');
   const [month, setMonth] = useState('');
   const [editing, setEditing] = useState(null);
+  const [page, setPage] = useState(1);
+  const [toDelete, setToDelete] = useState(null);
 
   const {
     data: donations = [],
@@ -219,7 +224,10 @@ export default function Donations() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteDonation(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setToDelete(null)
+      invalidate();
+    },
     onError: (e) => console.error('error', e),
   });
 
@@ -260,6 +268,21 @@ export default function Donations() {
     : donations.length
     ? 'لا توجد نتائج مطابقة للبحث.'
     : 'لم تتم إضافة أي تبرع بعد. اضغط «إضافة تبرع» للبدء.';
+
+     const pagination = useMemo(() => {
+              const total = list.length;
+              return { total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+            }, [list]);
+          
+            // Keep page valid (e.g. after deleting the last item on the last page)
+            useEffect(() => {
+              if (page > pagination.totalPages) setPage(pagination.totalPages);
+            }, [page, pagination.totalPages]);
+          
+            const pagedList = useMemo(
+              () => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+              [list, page]
+            );
 
   return (
     <>

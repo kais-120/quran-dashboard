@@ -1,10 +1,14 @@
 const { validationResult } = require("express-validator");
 const Teacher = require("../models/Teacher");
+const { Group } = require("../models");
 
 // Get all teachers
 exports.getTeachers = async (req, res) => {
   try {
     const teachers = await Teacher.findAll({
+      where:{
+        is_delete:false,
+      },
       order: [["createdAt", "DESC"]],
     });
 
@@ -120,7 +124,11 @@ exports.deleteTeacher = async (req, res) => {
       });
     }
 
-    await teacher.destroy();
+    await teacher.update({is_delete:true});
+    const group = await Group.findOne({where : {head_teacher_id:teacher.id}})
+    if(group){
+      await group.update({head_teacher_id:null})
+    }
 
     return res.status(200).json({
       message: "Teacher deleted successfully.",

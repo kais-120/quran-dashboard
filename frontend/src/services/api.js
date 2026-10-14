@@ -1,8 +1,13 @@
-import { Axios } from "../api/Api";
+import { Axios, AxiosToken } from "../api/Api";
 
 // auth
 
 export const login = (username,password) => Axios.post("/auth/login",{username,password})
+export const profile = () => AxiosToken.get("/auth/profile")
+export const update = (username) => AxiosToken.put("/auth/profile",{username})
+export const updatePassword = (ancien,nouveau) => AxiosToken.put("/auth/password",{ancien,nouveau})
+
+
 
 // student 
 export const getStudents = () =>  Axios.get("/student")
@@ -26,7 +31,7 @@ export const deleteSubscription = (id) =>  Axios.delete(`/subscription/${id}`)
 
 // Setting
 export const getSetting = () =>  Axios.get(`/setting`)
-export const updateSetting = (id,data) =>  Axios.put(`/setting/${id}`,data)
+export const updateSetting = (id,data) =>  Axios.put(`/setting`,data)
 
 
 // group 
@@ -78,11 +83,19 @@ export const deleteDonation = (id) => Axios.delete(`/donation/${id}`);
 
 export const getDashboard = () => Axios.get('/dashboard');
 
+// Teacher payment
 
 export const getTeacherPayments = (query) => Axios.get(`/teacher-payment?${query}`);
 export const createTeacherPayment = (data) => Axios.post('/teacher-payment', data);
 export const updateTeacherPayment = (id, data) => Axios.put(`/teacher-payment/${id}`, data);
 export const deleteTeacherPayment = (id) => Axios.delete(`/teacher-payment/${id}`);
 export const notPaidCurrentMonth = () => Axios.get(`/teacher-payment/not-paid-current-month`);
+
+// User
+
+export const getUsers = () => Axios.get('/user');
+export const createUser = (data) => Axios.post('/user',data);
+ export const deleteUser = (id) => Axios.delete(`/user/${id}`);
+ export const updateUser = (data) => Axios.put('/user',data);
 
 

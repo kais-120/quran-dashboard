@@ -1,7 +1,6 @@
 const { validationResult, body } = require("express-validator");
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken");
-const { ActivityLog } = require("../models");
 const User = require("../models/User");
 
 exports.login = [
@@ -73,6 +72,26 @@ exports.login = [
         }
     }]
  
+exports.getProfile = async (req, res) => {
+  try {
+    const userId = req.userId;
+ 
+    const user = await User.findOne({
+      where: { id: userId },
+      attributes: ["id", "full_name", "username", "role", "createdAt"],
+    });
+ 
+    if (!user) {
+      return res.status(404).json({ message: "المستخدم غير موجود." });
+    } 
+    return res.status(200).json({
+      user,
+    });
+  } catch (err) {
+    console.error("getProfile error:", err);
+    return res.status(500).json({ message: "خطأ في الخادم." });
+  }
+};
 
 exports.updateProfile = async (req, res) => {
   const errors = validationResult(req);
@@ -83,53 +102,37 @@ exports.updateProfile = async (req, res) => {
   try {
     const userId = req.userId
 
-    const { nom, prenom, telephone, email } = req.body;
+    const { username } = req.body;
  
     const user = await User.findOne({
-      where: { id: userId, is_deleted: false },
+      where: { id: userId},
     });
  
     if (!user) {
       return res.status(404).json({ message: "المستخدم غير موجود." });
     }
  
-    // Check email uniqueness if it changed
-    if (email && email !== user.email) {
+    if (username && username !== user.username) {
       const existing = await User.findOne({
-        where: { email, is_deleted: false },
+        where: { username },
       });
       if (existing) {
         return res
           .status(409)
-          .json({ message: "البريد الإلكتروني مستخدم من قبل حساب آخر." });
+          .json({ message: "username exist" });
       }
     }
  
-    user.name = nom ?? user.name;
-    user.last_name = prenom ?? user.last_name;
-    user.email = email ?? user.email;
-    // telephone: add a column to the User model if you need to persist it,
-    // it's accepted here but not currently stored since the model has no field for it
+    user.username = username ?? user.username;
     await user.save();
  
-    await ActivityLog.create({
-      action: "update",
-      entity_type: "user",
-      entity_id: user.id,
-      entity_name: `${user.last_name} ${user.name}`,
-      description: "تعديل المعلومات الشخصية",
-      user_name: `${user.last_name} ${user.name}`,
-      user_role: user.role,
-      user_id: user.id,
-    });
  
     return res.status(200).json({
       message: "تم تحديث المعلومات الشخصية بنجاح.",
       user: {
         id: user.id,
-        name: user.name,
-        last_name: user.last_name,
-        email: user.email,
+        full_name: user.full_name,
+        username: user.username,
         role: user.role,
       },
     });
@@ -151,7 +154,7 @@ exports.updatePassword = async (req, res) => {
     const { ancien, nouveau } = req.body;
  
     const user = await User.findOne({
-      where: { id: userId, is_deleted: false },
+      where: { id: userId},
     });
  
     if (!user) {
@@ -159,6 +162,7 @@ exports.updatePassword = async (req, res) => {
     }
  
     const match = await bcrypt.compare(ancien, user.password);
+    console.log(match)
     if (!match) {
       return res
         .status(400)
@@ -169,16 +173,7 @@ exports.updatePassword = async (req, res) => {
     user.password = hashed;
     await user.save();
  
-    await ActivityLog.create({
-      action: "update",
-      entity_type: "user",
-      entity_id: user.id,
-      entity_name: `${user.last_name} ${user.name}`,
-      description: "تغيير كلمة المرور",
-      user_name: `${user.last_name} ${user.name}`,
-      user_role: user.role,
-      user_id: user.id,
-    });
+
  
     return res.status(200).json({ message: "تم تحديث كلمة المرور بنجاح." });
   } catch (err) {

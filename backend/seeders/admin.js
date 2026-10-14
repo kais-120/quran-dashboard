@@ -9,6 +9,7 @@ const adminData = {
   full_name: "Admin",
   username: "admin",
   password: "admin123",
+  role:"admin"
 };
 
 const seedAdmin = async () => {
@@ -30,6 +31,7 @@ const seedAdmin = async () => {
     await User.create({
       ...adminData,
       password: hashedPassword,
+
     });
 
     console.log("✅ Admin user seeded successfully.");
