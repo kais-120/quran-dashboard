@@ -59,8 +59,8 @@ exports.getDashboard = async (req, res) => {
       latestExpenses,
       latestDonations,
     ] = await Promise.all([
-      Student.count(),
-      Teacher.count(),
+      Student.count({where:{is_delete:false}}),
+      Teacher.count({where:{is_delete:false}}),
       Group.count(),
       Course.count(),
       Activity.count(),
