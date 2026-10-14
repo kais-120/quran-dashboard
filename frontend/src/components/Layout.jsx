@@ -18,7 +18,7 @@ import {
 } from "react-icons/fa";
 
 const NAV = [
-  { to: "/", label: "لوحة التحكم", icon: FaHome, end: true },
+  { to: "/", label: "لوحة التحكم", icon: FaHome, end: true, adminOnly: true },
   { to: "/students", label: "التلاميذ", icon: FaUsers },
   { to: "/teachers", label: "المعلمون", icon: IoMdBook },
   { to: "/groups", label: "الأفواج", icon: MdGroups2 },
@@ -33,16 +33,18 @@ const NAV = [
     label: "التبرعات",
     icon: MdOutlineVolunteerActivism,
   },
-  { to: "/settings", label: "الإعدادات العامة", icon: FaSlidersH },
+  { to: "/settings", label: "الإعدادات", icon: FaSlidersH },
   { to: "/backup", label: "النسخ الاحتياطي", icon: FaDatabase },
 ];
 
 export default function Layout() {
-  const { data, logout } = useStore();
+  const { data, logout, isAdmin } = useStore();
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => setOpen(false), [location.pathname]);
+
+  const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
 
   return (
     <div className="app">
@@ -50,12 +52,12 @@ export default function Layout() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">۞</span>
           <div>
-            <strong>{data.association_name}</strong>
-            <small>{data.school_year}</small>
+            <strong>{data?.association_name}</strong>
+            <small>{data?.school_year}</small>
           </div>
         </div>
         <nav>
-          {NAV.map((n) => (
+          {navItems.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
               <span>
                 <n.icon size={22} />

@@ -7,7 +7,7 @@ export default function Login() {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [show, setShow] = useState(false);
-  const [error, setError] = useState('');  
+  const [error, setError] = useState('');
 
   const submit = (e) => {
     e.preventDefault();
@@ -35,7 +35,7 @@ export default function Login() {
             <span>كلمة المرور</span>
             <div className="pass">
               <input type={show ? 'text' : 'password'} value={pass} onChange={(e) => { setPass(e.target.value); setError(''); }} autoComplete="current-password" required dir="rtl" className="text-start" />
-              <button  type="button" className="icon-btn" onClick={() => setShow((s) => !s)} aria-label={show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'} aria-pressed={show}>
+              <button type="button" className="icon-btn" onClick={() => setShow((s) => !s)} aria-label={show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'} aria-pressed={show}>
                 <Icon name="eye" />
               </button>
             </div>
@@ -44,9 +44,11 @@ export default function Login() {
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <button className="btn primary block" type="submit">دخول</button>
-
-          
         </form>
+
+        <footer className="login-credit">
+          تطوير <strong>codeNex</strong> © {new Date().getFullYear()}
+        </footer>
       </section>
     </div>
   );

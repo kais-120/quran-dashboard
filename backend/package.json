@@ -12,7 +12,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "server": "nodemon server.js",
-    "admin": "node ./seeders/admin.js"
+    "admin": "node ./seeders/admin.js",
+    "info": "node ./seeders/association.js"
+
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

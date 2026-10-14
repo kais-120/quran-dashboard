@@ -22,6 +22,12 @@ function RequireAuth({ children }) {
   return isAuth ? children : <Navigate to="/login" replace />;
 }
 
+function RequireAdmin({ children }) {
+  const { isAdmin, authLoading } = useStore();
+  if (authLoading) return null; // or a spinner
+  return isAdmin ? children : <Navigate to="/students" replace />;
+}
+
 export default function App() {
   const { isAuth, authLoading } = useStore();
 
@@ -37,7 +43,14 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route
+          index
+          element={
+            <RequireAdmin>
+              <Dashboard />
+            </RequireAdmin>
+          }
+        />
         <Route path="students" element={<Students />} />
         <Route path="teachers" element={<Teachers />} />
         <Route path="registrations" element={<Registrations />} />
@@ -48,7 +61,13 @@ export default function App() {
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/donations" element={<Donations />} />
         <Route path="/backup" element={<BackupPage />} />
-        <Route path="/users" element={<Users />} />
+        <Route 
+          path="/users" 
+          element={
+             <RequireAdmin>
+                <Users />
+            </RequireAdmin>
+          } />
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

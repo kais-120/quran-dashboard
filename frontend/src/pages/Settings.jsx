@@ -42,7 +42,7 @@ const errMsg = (err, fallback) => err?.response?.data?.message || fallback;
 export default function Settings() {
   const qc = useQueryClient();
   const store = useStore();
-  const { replaceAll, clearRecords } = store;
+  const { isAdmin } = store;
 
   const [form, setForm] = useState({
     association_name: '',
@@ -161,28 +161,36 @@ export default function Settings() {
 
   return (
     <>
-      <PageHead title="الإعدادات العامة" subtitle="معلومات الجمعية والقوائم المستعملة في النماذج وحساب الدخول." />
+      <PageHead
+        title="الإعدادات"
+        subtitle={
+          isAdmin
+            ? 'معلومات الجمعية وإعدادات حساب الدخول.'
+            : 'إعدادات حساب الدخول وكلمة المرور.'
+        }
+      />
       {msg && (
         <div className={`toast ${msg.type === 'error' ? 'error' : ''}`} role={msg.type === 'error' ? 'alert' : 'status'}>
           {msg.text}
         </div>
       )}
-
-      <section className="panel">
-        <h2>معلومات الجمعية</h2>
-        <form onSubmit={saveGeneral} className="form-grid">
-          <label className="field wide"><span>اسم الجمعية</span><input value={form.association_name} onChange={f('association_name')} required /></label>
-          <label className="field"><span>السنة الدراسية الحالية</span><input value={form.school_year} onChange={f('school_year')} dir="ltr" className="text-start" required /></label>
-          <label className="field"><span>رسوم التسجيل الافتراضية</span><input type="number" min="0" step="any" value={form.default_fee} onChange={f('default_fee')} required /></label>
-          <label className="field"><span>هاتف الجمعية</span><input type="tel" dir="ltr" className="text-start" value={form.phone} onChange={f('phone')} /></label>
-          <label className="field"><span>العنوان</span><input value={form.address} onChange={f('address')} /></label>
-          <div className="form-actions">
-            <button className="btn primary" type="submit" disabled={settingMutation.isPending}>
-              {settingMutation.isPending ? 'جارٍ الحفظ...' : 'حفظ المعلومات'}
-            </button>
-          </div>
-        </form>
-      </section>
+      {isAdmin && (
+        <section className="panel">
+          <h2>معلومات الجمعية</h2>
+          <form onSubmit={saveGeneral} className="form-grid">
+            <label className="field wide"><span>اسم الجمعية</span><input value={form.association_name} onChange={f('association_name')} required /></label>
+            <label className="field"><span>السنة الدراسية الحالية</span><input value={form.school_year} onChange={f('school_year')} dir="ltr" className="text-start" required /></label>
+            <label className="field"><span>رسوم التسجيل الافتراضية</span><input type="number" min="0" step="any" value={form.default_fee} onChange={f('default_fee')} required /></label>
+            <label className="field"><span>هاتف الجمعية</span><input type="tel" dir="ltr" className="text-start" value={form.phone} onChange={f('phone')} /></label>
+            <label className="field"><span>العنوان</span><input value={form.address} onChange={f('address')} /></label>
+            <div className="form-actions">
+              <button className="btn primary" type="submit" disabled={settingMutation.isPending}>
+                {settingMutation.isPending ? 'جارٍ الحفظ...' : 'حفظ المعلومات'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <section className="panel">
         <h2>حساب الدخول</h2>

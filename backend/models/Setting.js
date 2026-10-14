@@ -30,11 +30,9 @@ const Setting = sequelize.define(
     },
     phone: {
       type: DataTypes.STRING(20),
-      allowNull: false,
     },
     address: {
       type: DataTypes.STRING(255),
-      allowNull: false,
     },
   },
   {

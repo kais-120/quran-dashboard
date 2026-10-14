@@ -96,6 +96,6 @@ export const notPaidCurrentMonth = () => Axios.get(`/teacher-payment/not-paid-cu
 export const getUsers = () => Axios.get('/user');
 export const createUser = (data) => Axios.post('/user',data);
  export const deleteUser = (id) => Axios.delete(`/user/${id}`);
- export const updateUser = (data) => Axios.put('/user',data);
+ export const updateUser = (id,data) => Axios.put(`/user/${id}`,data);
 
 
