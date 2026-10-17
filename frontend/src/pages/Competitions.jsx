@@ -7,8 +7,12 @@ import {
   getGroups,
   getCompetitionScores,
   saveCompetitionScores,
+  addCompetitionStranger,
+  removeCompetitionStranger,
+  getCompetitionGroup,
 } from '../services/api.js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 
 const MAX_SCORE = 100;
 const same = (a, b) => String(a ?? '') === String(b ?? '');
@@ -31,8 +35,11 @@ const YEARS = Array.from(
   (_, i) => THIS_YEAR - i
 );
 
-const studentIdOf = (sg) => sg.student_id ?? sg.students?.id;
-const studentNameOf = (sg) => sg.students?.name || '—';
+// A competitor is a membership row (student_group): works for students and strangers
+const memberIdOf = (sg) => sg.id;
+const isStranger = (sg) => sg.type === 'stranger';
+const memberNameOf = (sg) =>
+  (isStranger(sg) ? sg.name : sg.students?.name) || '—';
 
 // Returns every entry sharing the highest score (handles ties)
 const topOf = (entries) => {
@@ -45,24 +52,27 @@ export default function Competitions() {
   const queryClient = useQueryClient();
   const [year, setYear] = useState(THIS_YEAR);
   const [q, setQ] = useState('');
-  const [scoring, setScoring] = useState(null); // { group_id, values: { [studentId]: string } }
+  const [scoring, setScoring] = useState(null); // { group_id, values: { [studentGroupId]: string } }
   const [showResults, setShowResults] = useState(false);
+  const [strangerName, setStrangerName] = useState('');
+  const [toDelete, setToDelete] = useState(null);
+
 
   // ---------- Queries ----------
   const { data: groupsRaw } = useQuery({
-    queryKey: ['groups'],
-    queryFn: async () => toArray((await getGroups()).data),
+    queryKey: ['groups',year],
+    queryFn: async () => toArray((await getCompetitionGroup(year)).data),
   });
   const groups = toArray(groupsRaw);
 
-  // [{ year, group_id, student_id, score }]
+  // [{ year, group_id, student_group_id, score }]
   const { data: scoresRaw } = useQuery({
     queryKey: ['competition', year],
     queryFn: async () => toArray((await getCompetitionScores(year)).data),
   });
   const scores = toArray(scoresRaw);
 
-  // ---------- Mutation ----------
+  // ---------- Mutations ----------
   const saveMutation = useMutation({
     mutationFn: (payload) => saveCompetitionScores(payload),
     onSuccess: () => {
@@ -72,30 +82,50 @@ export default function Competitions() {
     onError: (err) => window.alert(errMsg(err)),
   });
 
+  const addStrangerMutation = useMutation({
+    mutationFn: (payload) => addCompetitionStranger(payload),
+    onSuccess: () => {
+      setStrangerName('');
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+    },
+    onError: (err) => window.alert(errMsg(err)),
+  });
+
+  const removeStrangerMutation = useMutation({
+    mutationFn: (id) => removeCompetitionStranger(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['competition'] });
+      setToDelete(null)
+    },
+    onError: (err) => window.alert(errMsg(err)),
+  });
+
   // ---------- Derived ----------
-  const scoreByStudent = useMemo(() => {
+  const scoreByMember = useMemo(() => {
     const m = new Map();
-    scores.forEach((s) => m.set(String(s.student_id), Number(s.score)));
+    scores.forEach((s) => m.set(String(s.student_group_id), Number(s.score)));
     return m;
   }, [scores]);
 
-  // per-group entries (students that have a score this year)
+  // per-group entries (members that have a score this year)
   const groupData = useMemo(
     () =>
       groups.map((g) => {
-        const students = g.studentGroup || [];
-        const entries = students
+        const members = g.studentGroup || [];
+        const entries = members
           .map((sg) => ({
-            id: studentIdOf(sg),
-            name: studentNameOf(sg),
-            score: scoreByStudent.get(String(studentIdOf(sg))),
+            id: memberIdOf(sg),
+            name: memberNameOf(sg),
+            stranger: isStranger(sg),
+            score: scoreByMember.get(String(memberIdOf(sg))),
             group: g.label,
           }))
           .filter((e) => e.score !== undefined)
           .sort((a, b) => b.score - a.score);
-        return { group: g, total: students.length, entries, top: topOf(entries) };
+        return { group: g, total: members.length, entries, top: topOf(entries) };
       }),
-    [groups, scoreByStudent]
+    [groups, scoreByMember]
   );
 
   const overallRanking = useMemo(
@@ -110,27 +140,31 @@ export default function Competitions() {
   );
 
   const scoringGroup = scoring ? groups.find((g) => same(g.id, scoring.group_id)) : null;
-  const scoringStudents = scoringGroup?.studentGroup || [];
+  const scoringMembers = scoringGroup?.studentGroup || [];
 
   // ---------- Handlers ----------
   const valuesFor = (groupId) => {
     const g = groups.find((x) => same(x.id, groupId));
     const values = {};
     (g?.studentGroup || []).forEach((sg) => {
-      const s = scoreByStudent.get(String(studentIdOf(sg)));
-      values[studentIdOf(sg)] = s === undefined ? '' : String(s);
+      const s = scoreByMember.get(String(memberIdOf(sg)));
+      values[memberIdOf(sg)] = s === undefined ? '' : String(s);
     });
     return values;
   };
 
-  const openScoring = (groupId = '') =>
+  const openScoring = (groupId = '') => {
+    setStrangerName('');
     setScoring({ group_id: groupId, values: groupId ? valuesFor(groupId) : {} });
+  };
 
-  const changeGroup = (groupId) =>
+  const changeGroup = (groupId) => {
+    setStrangerName('');
     setScoring({ group_id: groupId, values: groupId ? valuesFor(groupId) : {} });
+  };
 
-  const changeScore = (studentId, value) =>
-    setScoring((s) => ({ ...s, values: { ...s.values, [studentId]: value } }));
+  const changeScore = (memberId, value) =>
+    setScoring((s) => ({ ...s, values: { ...s.values, [memberId]: value } }));
 
   const invalidValue = (v) => {
     if (v === '') return false;
@@ -140,11 +174,25 @@ export default function Competitions() {
 
   const hasInvalid = scoring ? Object.values(scoring.values).some(invalidValue) : false;
 
+  const addStranger = () => {
+    const name = strangerName.trim();
+    if (!scoringGroup || !name || addStrangerMutation.isPending) return;
+    addStrangerMutation.mutate({ group_id: scoringGroup.id, name });
+  };
+
+  const removeStranger = (sg) => {
+    // if (!window.confirm(`حذف ${memberNameOf(sg)} من الفوج؟`)) return;
+    setToDelete(sg)
+    // removeStrangerMutation.mutate(sg.id);
+  };
+
   const saveScores = () => {
     if (!scoringGroup || hasInvalid) return;
+    // only current members (a removed stranger must not be sent)
+    const currentIds = new Set(scoringMembers.map((m) => String(memberIdOf(m))));
     const payload = Object.entries(scoring.values)
-      .filter(([, v]) => v !== '')
-      .map(([student_id, v]) => ({ student_id, score: Number(v) }));
+      .filter(([id, v]) => v !== '' && currentIds.has(String(id)))
+      .map(([student_group_id, v]) => ({ student_group_id, score: Number(v) }));
     saveMutation.mutate({ year, group_id: scoringGroup.id, scores: payload });
   };
 
@@ -152,7 +200,7 @@ export default function Competitions() {
     <>
       <PageHead
         title="المسابقة السنوية"
-        subtitle="مسابقة بين تلاميذ الفوج الواحد، مع ترتيب الأوائل في كل فوج وعلى مستوى كل التلاميذ."
+        subtitle="مسابقة بين المشاركين في الفوج الواحد، مع ترتيب الأوائل في كل فوج وعلى مستوى الجميع."
         action={
           <div className="head-actions">
             <button className="btn" onClick={() => setShowResults(true)}>
@@ -165,7 +213,7 @@ export default function Competitions() {
         }
       />
 
-      <div className="toolbar">
+      <div className="toolbar add-stranger">
         <div className="search">
           <Icon name="search" />
           <input placeholder="ابحث باسم الفوج" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -183,7 +231,7 @@ export default function Competitions() {
             <tr>
               <th>اسم الفوج</th>
               <th>المعلم المسؤول</th>
-              <th>التلاميذ المقيَّمون</th>
+              <th>المشاركون المقيَّمون</th>
               <th>الأول في الفوج</th>
               <th>النقطة</th>
               <th className="actions-col"><span className="sr">إجراءات</span></th>
@@ -228,45 +276,90 @@ export default function Competitions() {
           </div>
 
           {scoringGroup && (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>الاسم واللقب</th>
-                    <th>النقطة (من {MAX_SCORE})</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scoringStudents.map((sg) => {
-                    const id = studentIdOf(sg);
-                    const v = scoring.values[id] ?? '';
-                    return (
-                      <tr key={sg.id}>
-                        <td className="strong">{studentNameOf(sg)}</td>
-                        <td>
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max={MAX_SCORE}
-                            step="any"
-                            value={v}
-                            onChange={(e) => changeScore(id, e.target.value)}
-                            aria-label={`نقطة ${studentNameOf(sg)}`}
-                          />
-                          {invalidValue(v) && (
-                            <small className="error">القيمة بين 0 و {MAX_SCORE}</small>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {scoringStudents.length === 0 && (
-                    <tr><td colSpan="2" className="empty">لا يوجد تلاميذ في هذا الفوج.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="toolbar">
+                <div className="search">
+                  <Icon name="plus" />
+                  <input
+                    placeholder="إضافة مشارك من خارج المدرسة (الاسم واللقب)"
+                    value={strangerName}
+                    onChange={(e) => setStrangerName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addStranger();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                style={{marginLeft:25}}
+                  type="button"
+                  className="btn"
+                  onClick={addStranger}
+                  disabled={!strangerName.trim() || addStrangerMutation.isPending}
+                >
+                  إضافة
+                </button>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>الاسم واللقب</th>
+                      <th>النقطة (من {MAX_SCORE})</th>
+                      <th className="actions-col"><span className="sr">إجراءات</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scoringMembers.map((sg) => {
+                      const id = memberIdOf(sg);
+                      const v = scoring.values[id] ?? '';
+                      return (
+                        <tr key={sg.id}>
+                          <td className="strong">
+                            {memberNameOf(sg)}
+                            {isStranger(sg) && <span className="tag outside"> من خارج المدرسة</span>}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              max={MAX_SCORE}
+                              step="any"
+                              value={v}
+                              onChange={(e) => changeScore(id, e.target.value)}
+                              aria-label={`نقطة ${memberNameOf(sg)}`}
+                            />
+                            {invalidValue(v) && (
+                              <small className="error">القيمة بين 0 و {MAX_SCORE}</small>
+                            )}
+                          </td>
+                          <td className="actions">
+                            {isStranger(sg) && (
+                              <button
+                                type="button"
+                                className="btn icon-btn danger"
+                                onClick={() => removeStranger(sg)}
+                                disabled={removeStrangerMutation.isPending}
+                                aria-label={`حذف ${memberNameOf(sg)}`}
+                              >
+                                <Icon name="trash" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {scoringMembers.length === 0 && (
+                      <tr><td colSpan="3" className="empty">لا يوجد مشاركون في هذا الفوج.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           <div className="form-actions">
@@ -283,10 +376,21 @@ export default function Competitions() {
         </Modal>
       )}
 
+      {toDelete && (
+              <ConfirmModal
+                title="حذف مشارك من خارج المدرسة"
+                message={`حذف ${memberNameOf(toDelete)} من الفوج؟`}
+                confirmText="حذف"
+                danger
+                onClose={() => setToDelete(null)}
+                onConfirm={() => removeStrangerMutation.mutate(toDelete.id)}
+              />
+            )}
+
       {/* ---------- Results modal ---------- */}
       {showResults && (
         <Modal wide title={`نتائج مسابقة ${year}`} onClose={() => setShowResults(false)}>
-          <h4>الأول على كل التلاميذ</h4>
+          <h4>الأول على الجميع</h4>
           <div className="table-wrap">
             <table>
               <thead>
@@ -299,7 +403,10 @@ export default function Competitions() {
               <tbody>
                 {overallTop.map((t) => (
                   <tr key={`${t.group}-${t.id}`}>
-                    <td className="strong">{t.name}</td>
+                    <td className="strong">
+                      {t.name}
+                      {t.stranger && <span className="tag"> من خارج المدرسة</span>}
+                    </td>
                     <td>{t.group}</td>
                     <td><span className="num">{t.score}</span></td>
                   </tr>
@@ -351,7 +458,10 @@ export default function Competitions() {
                 {overallRanking.slice(0, 10).map((e, i) => (
                   <tr key={`${e.group}-${e.id}`}>
                     <td><span className="num">{i + 1}</span></td>
-                    <td className="strong">{e.name}</td>
+                    <td className="strong">
+                      {e.name}
+                      {e.stranger && <span className="tag"> من خارج المدرسة</span>}
+                    </td>
                     <td>{e.group}</td>
                     <td><span className="num">{e.score}</span></td>
                   </tr>

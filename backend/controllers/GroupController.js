@@ -15,6 +15,7 @@ exports.getGroups = async (req, res) => {
         },
         {
             model:StudentGroup,
+            where:{type:"student"},
             as:"studentGroup",
             include:[
                 {

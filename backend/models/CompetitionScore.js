@@ -6,8 +6,15 @@ const CompetitionScore = sequelize.define(
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     year: { type: DataTypes.INTEGER, allowNull: false },
-    group_id: { type: DataTypes.INTEGER, allowNull: false },
-    student_id: { type: DataTypes.INTEGER, allowNull: false },
+    group_id: { type: DataTypes.BIGINT, allowNull: false },
+    // membership row: works for both students and strangers
+    student_group_id: {
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      references: { model: "student_groups", key: "id" },
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    },
     score: {
       type: DataTypes.DECIMAL(5, 2),
       allowNull: false,
@@ -17,15 +24,15 @@ const CompetitionScore = sequelize.define(
   {
     tableName: "competition_scores",
     indexes: [
-      // تلميذ واحد = نقطة واحدة في السنة
+      // عضو واحد = نقطة واحدة في السنة
       {
         unique: true,
-        name: "uq_competition_year_student",
-        fields: ["year", "student_id"],
+        name: "uq_competition_year_member",
+        fields: ["year", "student_group_id"],
       },
       { name: "idx_competition_year_group", fields: ["year", "group_id"] },
     ],
-  },
+  }
 );
 
 module.exports = CompetitionScore;

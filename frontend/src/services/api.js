@@ -100,5 +100,9 @@ export const createUser = (data) => Axios.post('/user',data);
 
 export const getCompetitionScores = (year) => Axios.get('/competitions', { params: { year } });
 export const saveCompetitionScores = (data) => Axios.post('/competitions/scores', data);
+export const addCompetitionStranger = (payload) => Axios.post('/competitions/strangers', payload);
+export const removeCompetitionStranger = (id) => Axios.delete(`/competitions/strangers/${id}`);
+export const getCompetitionGroup = (year) => Axios.get(`/competitions/group`, { params: { year } });
+
 
 

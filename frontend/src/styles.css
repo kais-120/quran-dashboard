@@ -307,3 +307,45 @@ td input[type='number'] {
 }
 
 .head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- Competition: add stranger ---------- */
+.add-stranger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 12px 0;
+  padding: 0;            /* cancel any padding/negative margin from .toolbar */
+}
+.add-stranger .search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.add-stranger .btn {
+  flex-shrink: 0;
+  margin: 0;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
+.add-stranger {
+  padding-inline: 4px;
+}
+
+/* small delete button in the table row */
+.btn.icon-btn {
+  padding: 6px 8px;
+  line-height: 1;
+}
+.btn.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+.btn.danger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
