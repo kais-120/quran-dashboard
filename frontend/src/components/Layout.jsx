@@ -15,6 +15,7 @@ import {
   FaDatabase,
   FaGraduationCap,
   FaUserCog,
+  FaTrophy,
 } from "react-icons/fa";
 
 const NAV = [
@@ -25,6 +26,7 @@ const NAV = [
   { to: "/registrations", label: "التسجيلات", icon: FaClipboardCheck },
   { to: "/users", label: "المستخدمون", icon: FaUserCog },
   { to: "/activities", label: "النشاطات", icon: FaCalendarCheck },
+  { to: "/competitions", label: "مسابقات", icon: FaTrophy },
   { to: "/courses", label: "الدورات", icon: FaGraduationCap },
   { to: "/absences", label: "الغيابات", icon: FaUserClock },
   { to: "/expenses", label: "المصاريف", icon: FaMoneyBillWave },

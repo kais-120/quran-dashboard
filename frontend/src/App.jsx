@@ -15,6 +15,7 @@ import Expenses from './pages/Expenses.jsx';
 import Donations from './pages/Donations.jsx';
 import BackupPage from './pages/BackupPage.jsx';
 import Users from './pages/Users.jsx';
+import Competitions from './pages/Competitions.jsx';
 
 function RequireAuth({ children }) {
   const { isAuth, authLoading } = useStore();
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/absences" element={<Absences />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/donations" element={<Donations />} />
+        <Route path="/competitions" element={<Competitions />} />
         <Route path="/backup" element={<BackupPage />} />
         <Route 
           path="/users" 

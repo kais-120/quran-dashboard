@@ -1,4 +1,5 @@
 const Absence = require("./Absence");
+const CompetitionScore = require("./CompetitionScore");
 const Course = require("./Course");
 const CourseStudent = require("./CourseStudent");
 const Group = require("./Group");
@@ -94,7 +95,10 @@ TeacherPayment.belongsTo(Teacher, {
   as: "teacher",
 });
 
-
+CompetitionScore.belongsTo(Group, { foreignKey: 'group_id', as: 'group', onDelete: 'CASCADE' });
+CompetitionScore.belongsTo(Student, { foreignKey: 'student_id', as: 'student', onDelete: 'CASCADE' });
+Group.hasMany(CompetitionScore, { foreignKey: 'group_id', as: 'competitionScores' });
+Student.hasMany(CompetitionScore, { foreignKey: 'student_id', as: 'competitionScores' });
 
 
 module.exports = {
@@ -106,5 +110,6 @@ module.exports = {
   SubscriptionPayment,
   CourseStudent,
   Course,
-  TeacherPayment
+  TeacherPayment,
+  CompetitionScore
 };

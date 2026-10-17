@@ -16,9 +16,7 @@ const DashboardRoutes = require("./routes/DashboardRoutes")
 const TeacherPaymentRoutes = require("./routes/TeacherPaymentRoutes")
 const UserRoutes = require("./routes/UserRoutes")
 const BackupRoute = require("./routes/BackupRoute")
-
-
-
+const CompetitionRoutes = require('./routes/CompetitionRoutes')
 
 
 router.use("/auth",AuthRouter);
@@ -37,6 +35,7 @@ router.use("/dashboard", DashboardRoutes);
 router.use("/teacher-payment", TeacherPaymentRoutes);
 router.use("/user", UserRoutes);
 router.use("/backup", BackupRoute);
+router.use('/competitions',CompetitionRoutes);
 
 
 

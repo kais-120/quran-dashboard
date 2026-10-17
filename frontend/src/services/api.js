@@ -98,4 +98,7 @@ export const createUser = (data) => Axios.post('/user',data);
  export const deleteUser = (id) => Axios.delete(`/user/${id}`);
  export const updateUser = (id,data) => Axios.put(`/user/${id}`,data);
 
+export const getCompetitionScores = (year) => Axios.get('/competitions', { params: { year } });
+export const saveCompetitionScores = (data) => Axios.post('/competitions/scores', data);
+
 
