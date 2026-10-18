@@ -1,6 +1,48 @@
 {
+  "name": "my-electron-app",
+  "version": "1.0.0",
+  "description": "Desktop app",
+  "main": "main.js",
+  "author": "codenex",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+  },
   "devDependencies": {
-    "electron": "^44.9.0",
-    "electron-builder": "^26.15.3"
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.yourcompany.myapp",
+    "productName": "My App",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "logo-manager.js",
+      "assets/**/*",
+      "frontend/**/*",
+      "backend/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "backend/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/logo.png",
+      "uninstallerIcon": "assets/logo.png"
+    }
   }
 }

@@ -115,8 +115,21 @@ export default function Settings() {
 
   const logoMutation = useMutation({
     mutationFn: (file) => updateLogo(file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['setting'] });
+    onSuccess: async () => {
+      // reload settings so we have the new logo path from the backend
+      await qc.invalidateQueries({ queryKey: ['setting'] });
+      const fresh = qc.getQueryData(['setting']);
+
+      // tell Electron to download it and update the app icon right now
+      if (window.logoApi?.set && fresh?.logo) {
+        try {
+          const url = `${assetUrl(fresh.logo)}${assetUrl(fresh.logo).includes('?') ? '&' : '?'}t=${Date.now()}`;
+          await window.logoApi.set(url);
+        } catch (e) {
+          console.error('Electron logo update failed', e);
+        }
+      }
+
       setLogoFile(null);
       setLogoPreview('');
       flash('تم تحديث الشعار.');
