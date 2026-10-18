@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../store.jsx';
-import { getSetting, updateSetting, profile, update, updatePassword } from '../services/api';
+import { getSetting, updateSetting, updateLogo, profile, update, updatePassword } from '../services/api';
 import PageHead from '../components/PageHead.jsx';
 import Icon from '../components/Icon.jsx';
+import { assetUrl } from '../api/Api.js';
+
+const MAX_LOGO_FILE = 2 * 1024 * 1024; // keep in sync with multer limit
 
 function ListEditor({ title, hint, items, onChange, placeholder }) {
   const [value, setValue] = useState('');
@@ -43,6 +46,7 @@ export default function Settings() {
   const qc = useQueryClient();
   const store = useStore();
   const { isAdmin } = store;
+  const fileRef = useRef(null);
 
   const [form, setForm] = useState({
     association_name: '',
@@ -53,6 +57,8 @@ export default function Settings() {
   });
   const [acc, setAcc] = useState({ username: '' });
   const [pwd, setPwd] = useState({ ancien: '', nouveau: '' });
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState('');
   // { type: 'error' | 'success', text: string } | null
   const [msg, setMsg] = useState(null);
   const [usernameStatus, setUsernameStatus] = useState(null);
@@ -90,6 +96,13 @@ export default function Settings() {
     setAcc({ username: profileQuery.data.username ?? '' });
   }, [profileQuery.data]);
 
+  // Free the blob URL when it changes / on unmount
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
+
   // ---------- Mutations ----------
   const settingMutation = useMutation({
     mutationFn: ({ id, data }) => updateSetting(id, data),
@@ -98,6 +111,17 @@ export default function Settings() {
       flash('تم حفظ الإعدادات.');
     },
     onError: (err) => flash(errMsg(err, 'تعذر حفظ الإعدادات.'), 'error'),
+  });
+
+  const logoMutation = useMutation({
+    mutationFn: (file) => updateLogo(file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['setting'] });
+      setLogoFile(null);
+      setLogoPreview('');
+      flash('تم تحديث الشعار.');
+    },
+    onError: (err) => flash(errMsg(err, 'تعذر تحديث الشعار.'), 'error'),
   });
 
   const profileMutation = useMutation({
@@ -138,6 +162,26 @@ export default function Settings() {
     });
   };
 
+  const pickLogo = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return flash('الملف المختار ليس صورة.', 'error');
+    if (file.size > MAX_LOGO_FILE) return flash('حجم الصورة كبير جدًا (الحد 2 ميغابايت).', 'error');
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const cancelLogo = () => {
+    setLogoFile(null);
+    setLogoPreview('');
+  };
+
+  const saveLogo = () => {
+    if (!logoFile) return;
+    logoMutation.mutate(logoFile);
+  };
+
   const saveAccount = (e) => {
     e.preventDefault();
     setUsernameStatus(null);
@@ -159,6 +203,8 @@ export default function Settings() {
     return <p className="muted">تعذر تحميل الإعدادات.</p>;
   }
 
+  const shownLogo = logoPreview || assetUrl(settings?.logo);
+
   return (
     <>
       <PageHead
@@ -174,6 +220,52 @@ export default function Settings() {
           {msg.text}
         </div>
       )}
+
+      {isAdmin && (
+        <section className="panel">
+          <h2>شعار الجمعية</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: 12,
+                border: '1px dashed #cbd5e1',
+                display: 'grid',
+                placeItems: 'center',
+                overflow: 'hidden',
+                background: '#f8fafc',
+              }}
+            >
+              {shownLogo ? (
+                <img src={shownLogo} alt="شعار الجمعية" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              ) : (
+                <span className="muted small">لا يوجد شعار</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input ref={fileRef} type="file" accept="image/*" onChange={pickLogo} hidden />
+              <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+                <Icon name="plus" /> {settings?.logo || logoFile ? 'تغيير الشعار' : 'اختيار شعار'}
+              </button>
+              {logoFile && (
+                <button type="button" className="btn" onClick={cancelLogo}>
+                  <Icon name="x" /> إلغاء
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn primary"
+                onClick={saveLogo}
+                disabled={!logoFile || logoMutation.isPending}
+              >
+                {logoMutation.isPending ? 'جارٍ الحفظ...' : 'حفظ الشعار'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {isAdmin && (
         <section className="panel">
           <h2>معلومات الجمعية</h2>

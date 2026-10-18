@@ -16,6 +16,9 @@ import Donations from './pages/Donations.jsx';
 import BackupPage from './pages/BackupPage.jsx';
 import Users from './pages/Users.jsx';
 import Competitions from './pages/Competitions.jsx';
+import useFavicon from './hooks/useFavicon.js';
+import { useEffect } from 'react';
+import { assetUrl } from './api/Api.js';
 
 function RequireAuth({ children }) {
   const { isAuth, authLoading } = useStore();
@@ -30,7 +33,17 @@ function RequireAdmin({ children }) {
 }
 
 export default function App() {
-  const { isAuth, authLoading } = useStore();
+  const { isAuth, authLoading,data } = useStore();
+  const faviconUrl = data?.logo
+  ? `${assetUrl(data.logo)}?v=${new Date(data.updatedAt).getTime()}`
+  : "";
+
+useFavicon(faviconUrl,14);
+
+// optional: tab title too
+useEffect(() => {
+  if (data?.association_name) document.title = data.association_name;
+}, [data?.association_name]);
 
   if (authLoading) return null; // or a spinner
 

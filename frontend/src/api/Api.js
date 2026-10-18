@@ -23,3 +23,9 @@ AxiosToken.interceptors.request.use(
         return Promise.reject(error);
     }
 );
+
+// Server origin (http://localhost:5000), used for /uploads/... files
+const API_ORIGIN = new URL(baseURL).origin;
+
+export const assetUrl = (p) =>
+    !p ? '' : /^(https?:|data:|blob:)/.test(p) ? p : `${API_ORIGIN}${p}`;

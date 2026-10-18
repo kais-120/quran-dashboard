@@ -34,6 +34,9 @@ const Setting = sequelize.define(
     address: {
       type: DataTypes.STRING(255),
     },
+     logo: {
+      type: DataTypes.STRING(255),
+    },
   },
   {
     tableName: "settings",

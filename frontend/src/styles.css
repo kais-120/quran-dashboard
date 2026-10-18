@@ -80,6 +80,14 @@ a { color: var(--night-2); }
 .menu-btn { display: none; }
 .content { padding: 28px 32px 56px; max-width: 1180px; width: 100%; margin-inline: auto; }
 .scrim { display: none; }
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;   /* circle; use 10px for a rounded square */
+  object-fit: cover;    /* fills the circle without stretching */
+  flex-shrink: 0;       /* stops flex from squashing it */
+  display: block;
+}
 
 /* ---------- Headers ---------- */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }

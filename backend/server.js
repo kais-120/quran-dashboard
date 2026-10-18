@@ -5,7 +5,7 @@ const sequelize = require("./config/db");
 const app = express();
 const appStart = require("./app");
 require("./models/index")
-
+const path = require('path')
 
 
 
@@ -27,6 +27,7 @@ startDatabase();
 app.use(express.json());
 app.use(cors());
 
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use("/api/v1", appStart);
 
 

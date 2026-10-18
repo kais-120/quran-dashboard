@@ -32,7 +32,11 @@ export const deleteSubscription = (id) =>  Axios.delete(`/subscription/${id}`)
 // Setting
 export const getSetting = () =>  Axios.get(`/setting`)
 export const updateSetting = (id,data) =>  Axios.put(`/setting`,data)
-
+export const updateLogo = (file) => {
+  const data = new FormData();
+  data.append('logo', file);
+  return Axios.put('/setting/logo', data); // don't set Content-Type manually
+};
 
 // group 
 export const getGroups = () =>  Axios.get("/group")

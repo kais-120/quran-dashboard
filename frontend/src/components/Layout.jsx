@@ -17,6 +17,7 @@ import {
   FaUserCog,
   FaTrophy,
 } from "react-icons/fa";
+import { assetUrl } from '../api/Api.js';
 
 const NAV = [
   { to: "/", label: "لوحة التحكم", icon: FaHome, end: true, adminOnly: true },
@@ -52,7 +53,11 @@ export default function Layout() {
     <div className="app">
       <aside className={'sidebar' + (open ? ' open' : '')}>
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">۞</span>
+                    {data?.logo ? (
+            <img className="brand-logo" src={assetUrl(data.logo)} alt="logo" />
+          ) : (
+            <span className="brand-mark" aria-hidden="true">۞</span>
+          )}
           <div>
             <strong>{data?.association_name}</strong>
             <small>{data?.school_year}</small>
