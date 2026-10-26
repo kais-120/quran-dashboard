@@ -36,6 +36,7 @@ router.use("/teacher-payment", TeacherPaymentRoutes);
 router.use("/user", UserRoutes);
 router.use("/backup", BackupRoute);
 router.use('/competitions',CompetitionRoutes);
+app.use('/api/reports', /* authMiddleware, */ require('./routes/reportRoutes'));
 
 
 

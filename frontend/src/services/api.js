@@ -108,5 +108,12 @@ export const addCompetitionStranger = (payload) => Axios.post('/competitions/str
 export const removeCompetitionStranger = (id) => Axios.delete(`/competitions/strangers/${id}`);
 export const getCompetitionGroup = (year) => Axios.get(`/competitions/group`, { params: { year } });
 
+// reports
+
+export const getReportPeriods = () => Axios.get('/reports/periods');
+export const downloadReportPdf = (params) =>
+  Axios.get('/reports/pdf', { params, responseType: 'blob' });
+export const getReportSummary = (params) => Axios.get('/reports/summary', { params });
+
 
 

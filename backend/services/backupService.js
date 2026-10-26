@@ -1,243 +1,247 @@
-// backupService.js
-// Hourly automatic backup that only saves a new backup when data actually changed.
-// Requires: npm install node-cron googleapis
+const fs = require("fs");
+const path = require("path");
+const zlib = require("zlib");
+const { spawn } = require("child_process");
+const { pipeline } = require("stream/promises");
+const cron = require("node-cron");
+const sequelize = require("../config/db");
+const drive = require("./googleDrive");
+const { BackupLog } = require("../models/Backup");
 
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const cron = require('node-cron');
-const { google } = require('googleapis');
+const BACKUP_DIR = path.join(__dirname, "..", "backups");
+const SAFETY_DIR = path.join(BACKUP_DIR, "pre-restore");
+const TMP_DIR = path.join(BACKUP_DIR, "tmp");
+const RETENTION = Number(process.env.BACKUP_RETENTION || 30);
+const SAFETY_RETENTION = 5;
+const EXT = ".sql.gz";
 
-// ---------------------------------------------------------------------------
-// CONFIG - adjust these to match your setup
-// ---------------------------------------------------------------------------
-const DB_CONFIG = {
-  host: process.env.HOSTDB,
-  port: process.env.PORTDB,
-  user: process.env.USERNAMEDB,
-  password: process.env.PASSWORDDB,
-  database: process.env.DATABASE,
-};
+let isRunning = false; // shared lock: backup or restore
 
-const LOCAL_BACKUP_DIR = path.join(__dirname, '../backups');
-const PG_DUMP_PATH = process.env.PG_DUMP_PATH;
-const STATE_FILE = path.join(LOCAL_BACKUP_DIR, '.last_backup_hash.json');
-// NEW: tiny sidecar file that records the outcome of the last Drive upload,
-// since nothing else in this file was tracking that. Doesn't touch your
-// existing dump/hash/prune logic at all.
-const DRIVE_STATE_FILE = path.join(LOCAL_BACKUP_DIR, '.last_drive_upload.json');
-const MAX_LOCAL_BACKUPS = 30; // keep last 30 (roughly a month if hourly-but-only-on-change)
-const MAX_DRIVE_BACKUPS = 30;
+const stamp = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || 'YOUR_FOLDER_ID_HERE';
-
-// Ensure local backup folder exists
-if (!fs.existsSync(LOCAL_BACKUP_DIR)) {
-  fs.mkdirSync(LOCAL_BACKUP_DIR, { recursive: true });
+function dbArgs() {
+  const { host, port, username, database } = sequelize.config;
+  return ["-h", host || "localhost", "-p", String(port || 5432), "-U", username, "-d", database];
 }
 
-// ---------------------------------------------------------------------------
-// 1. Dump the database to a .sql file using pg_dump
-// ---------------------------------------------------------------------------
-function dumpDatabase(outputPath) {
-  return new Promise((resolve, reject) => {
-    const cmd = `"${PG_DUMP_PATH}" -h ${DB_CONFIG.host} -p ${DB_CONFIG.port} -U ${DB_CONFIG.user} -d ${DB_CONFIG.database} -F p -f "${outputPath}"`;
-    exec(cmd, { env: { ...process.env, PGPASSWORD: DB_CONFIG.password } }, (error, stdout, stderr) => {
-      if (error) {
-        return reject(new Error(`pg_dump failed: ${stderr || error.message}`));
+function dbEnv() {
+  return { ...process.env, PGPASSWORD: sequelize.config.password || "" };
+}
+
+// pg_dump -> gzip -> file (credentials come from your Sequelize config)
+function dumpDatabase(filePath) {
+  const child = spawn("pg_dump", [...dbArgs(), "--no-owner", "--clean", "--if-exists"], {
+    env: dbEnv(),
+  });
+
+  let stderr = "";
+  child.stderr.on("data", (d) => (stderr += d));
+
+  const exited = new Promise((resolve, reject) => {
+    child.on("error", (e) =>
+      reject(
+        e.code === "ENOENT"
+          ? new Error("pg_dump not found. Install postgresql-client on the server.")
+          : e
+      )
+    );
+    child.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`pg_dump failed (${code}): ${stderr.trim()}`))
+    );
+  });
+
+  const written = new Promise((resolve, reject) => {
+    const out = fs.createWriteStream(filePath);
+    out.on("error", reject);
+    out.on("finish", resolve);
+    child.stdout.pipe(zlib.createGzip()).pipe(out);
+  });
+
+  return Promise.all([exited, written]);
+}
+
+// file (.sql.gz or plain .sql) -> psql, all in one transaction (all or nothing)
+function isGzip(filePath) {
+  const fd = fs.openSync(filePath, "r");
+  const buf = Buffer.alloc(2);
+  fs.readSync(fd, buf, 0, 2, 0);
+  fs.closeSync(fd);
+  return buf[0] === 0x1f && buf[1] === 0x8b;
+}
+
+function psqlRestore(filePath) {
+  const child = spawn(
+    "psql",
+    [...dbArgs(), "-q", "-v", "ON_ERROR_STOP=1", "--single-transaction"],
+    { env: dbEnv() }
+  );
+
+  let stderr = "";
+  child.stderr.on("data", (d) => (stderr += d));
+  child.stdin.on("error", () => {}); // psql may exit early (EPIPE); the close handler reports why
+
+  const exited = new Promise((resolve, reject) => {
+    child.on("error", (e) =>
+      reject(
+        e.code === "ENOENT"
+          ? new Error("psql not found. Install postgresql-client on the server.")
+          : e
+      )
+    );
+    child.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`psql failed (${code}): ${stderr.trim()}`))
+    );
+  });
+
+  const source = fs.createReadStream(filePath);
+  const feed = isGzip(filePath)
+    ? pipeline(source, zlib.createGunzip(), child.stdin)
+    : pipeline(source, child.stdin);
+
+  return Promise.all([exited, feed.catch(() => {})]);
+}
+
+function pruneDir(dir, keep) {
+  if (!fs.existsSync(dir)) return;
+  fs.readdirSync(dir)
+    .filter((f) => f.endsWith(EXT))
+    .map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs }))
+    .sort((a, b) => b.t - a.t)
+    .slice(keep)
+    .forEach(({ f }) => fs.unlinkSync(path.join(dir, f)));
+}
+
+function applyRetention() {
+  pruneDir(BACKUP_DIR, RETENTION);
+}
+
+// userIds: users whose Google Drive should receive the file
+async function runBackup(userIds = []) {
+  console.log("[backup] userIds:", userIds);
+  if (isRunning) throw new Error("A backup or restore is already running");
+  isRunning = true;
+
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const filename = `backup-${stamp()}${EXT}`;
+  const filePath = path.join(BACKUP_DIR, filename);
+  const log = await BackupLog.create({ filename, status: "running" });
+
+  try {
+    await dumpDatabase(filePath);
+    await log.update({ size: fs.statSync(filePath).size });
+
+    let uploaded = false;
+    const driveErrors = [];
+    for (const userId of userIds) {
+      try {
+        await drive.uploadFile(userId, filePath, filename);
+        uploaded = true;
+      } catch (e) {
+        driveErrors.push(`user ${userId}: ${e.message}`);
       }
-      resolve(outputPath);
+    }
+
+    await log.update({
+      status: "success",
+      uploaded_to_drive: uploaded,
+      error: driveErrors.length ? driveErrors.join("\n") : null,
     });
-  });
-}
-
-// ---------------------------------------------------------------------------
-// 2. Hash the dump content so we can detect "is there new data?"
-// ---------------------------------------------------------------------------
-function hashFile(filePath) {
-  const content = fs.readFileSync(filePath);
-  return crypto.createHash('sha256').update(content).digest('hex');
-}
-
-function getLastHash() {
-  if (!fs.existsSync(STATE_FILE)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')).hash;
-  } catch {
-    return null;
-  }
-}
-
-function saveLastHash(hash) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ hash, updatedAt: new Date().toISOString() }));
-}
-
-// NEW: read/write helpers for the Drive upload sidecar file.
-function getDriveState() {
-  if (!fs.existsSync(DRIVE_STATE_FILE)) return { lastUploadAt: null, uploadedFileNames: [] };
-  try {
-    return JSON.parse(fs.readFileSync(DRIVE_STATE_FILE, 'utf-8'));
-  } catch {
-    return { lastUploadAt: null, uploadedFileNames: [] };
-  }
-}
-
-function recordDriveUpload(fileName) {
-  const state = getDriveState();
-  state.lastUploadAt = new Date().toISOString();
-  state.uploadedFileNames = [...(state.uploadedFileNames || []), fileName].slice(-MAX_DRIVE_BACKUPS);
-  fs.writeFileSync(DRIVE_STATE_FILE, JSON.stringify(state, null, 2));
-}
-
-// ---------------------------------------------------------------------------
-// 3. Google Drive upload
-// ---------------------------------------------------------------------------
-async function getDriveClient() {
-  const oAuth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-  oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-  return google.drive({ version: 'v3', auth: oAuth2Client });
-}
-
-async function uploadToDrive(filePath, fileName) {
-  const drive = await getDriveClient();
-  const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [GOOGLE_DRIVE_FOLDER_ID],
-    },
-    media: {
-      mimeType: 'application/sql',
-      body: fs.createReadStream(filePath),
-    },
-    fields: 'id',
-  });
-  return res.data.id;
-}
-
-async function pruneDriveBackups() {
-  const drive = await getDriveClient();
-  const res = await drive.files.list({
-    q: `'${GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
-    fields: 'files(id, name, createdTime)',
-    orderBy: 'createdTime desc',
-  });
-  const files = res.data.files || [];
-  const toDelete = files.slice(MAX_DRIVE_BACKUPS);
-  for (const file of toDelete) {
-    await drive.files.delete({ fileId: file.id });
-  }
-}
-
-// NEW: cheap connectivity check for the frontend's "Google Drive: Connecté /
-// Non connecté" card. Doesn't change any existing upload/prune behavior.
-async function isGoogleDriveConnected() {
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
-    return false;
-  }
-  try {
-    const oAuth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-    oAuth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-    await oAuth2Client.getAccessToken();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getLastDriveUploadDate() {
-  return getDriveState().lastUploadAt;
-}
-
-async function getUploadedFileNames() {
-  return getDriveState().uploadedFileNames || [];
-}
-
-// ---------------------------------------------------------------------------
-// 4. Local pruning
-// ---------------------------------------------------------------------------
-function pruneLocalBackups() {
-  const files = fs
-    .readdirSync(LOCAL_BACKUP_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .map((f) => ({ name: f, time: fs.statSync(path.join(LOCAL_BACKUP_DIR, f)).mtime.getTime() }))
-    .sort((a, b) => b.time - a.time);
-
-  const toDelete = files.slice(MAX_LOCAL_BACKUPS);
-  for (const file of toDelete) {
-    fs.unlinkSync(path.join(LOCAL_BACKUP_DIR, file.name));
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 5. Main check-and-backup routine (this is what cron calls every hour)
-// ---------------------------------------------------------------------------
-async function checkAndBackup() {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const tempPath = path.join(LOCAL_BACKUP_DIR, `_temp_${timestamp}.sql`);
-
-  try {
-    console.log(`[Backup] Checking for changes at ${new Date().toLocaleString()}...`);
-    await dumpDatabase(tempPath);
-
-    const currentHash = hashFile(tempPath);
-    const lastHash = getLastHash();
-
-    if (currentHash === lastHash) {
-      console.log('[Backup] No new data since last backup — skipping.');
-      fs.unlinkSync(tempPath);
-      return { skipped: true };
-    }
-
-    // Data changed — keep this backup
-    const finalName = `galaxy_gym_backup_${timestamp}.sql`;
-    const finalPath = path.join(LOCAL_BACKUP_DIR, finalName);
-    fs.renameSync(tempPath, finalPath);
-
-    saveLastHash(currentHash);
-    pruneLocalBackups();
-
-    console.log('[Backup] New data detected — saved locally:', finalName);
-
-    // Upload to Google Drive
-    try {
-      await uploadToDrive(finalPath, finalName);
-      await pruneDriveBackups();
-      recordDriveUpload(finalName); // NEW
-      console.log('[Backup] Uploaded to Google Drive successfully.');
-    } catch (driveErr) {
-      console.error('[Backup] Google Drive upload failed (local backup still saved):', driveErr.message);
-    }
-
-    return { skipped: false, file: finalName };
+    applyRetention();
+    return log;
   } catch (err) {
-    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    console.error('[Backup] Backup failed:', err.message);
+    fs.rmSync(filePath, { force: true }); // remove partial file
+    await log.update({ status: "error", error: err.message });
     throw err;
+  } finally {
+    isRunning = false;
   }
 }
 
-// ---------------------------------------------------------------------------
-// 6. Schedule: run every hour, check for changes, back up only if changed
-// ---------------------------------------------------------------------------
-function startBackupCron() {
-  // '0 * * * *' = at minute 0 of every hour
-  cron.schedule('0 * * * *', () => {
-    checkAndBackup().catch(() => {});
+// Core restore. Takes a safety dump first so a bad restore can be undone by hand.
+async function restoreFromPath(filePath) {
+  if (isRunning) throw new Error("A backup or restore is already running");
+  isRunning = true;
+
+  try {
+    if (!fs.existsSync(filePath)) throw new Error("Backup file not found");
+
+    fs.mkdirSync(SAFETY_DIR, { recursive: true });
+    const safetyFile = path.join(SAFETY_DIR, `pre-restore-${stamp()}${EXT}`);
+    try {
+      await dumpDatabase(safetyFile);
+    } catch (e) {
+      fs.rmSync(safetyFile, { force: true });
+      throw new Error(`Safety backup failed, restore aborted: ${e.message}`);
+    }
+
+    // Single transaction: if anything fails, the database stays untouched.
+    await psqlRestore(filePath);
+
+    pruneDir(SAFETY_DIR, SAFETY_RETENTION);
+    console.log("[restore] done. Safety copy:", safetyFile);
+    return { safetyFile: path.basename(safetyFile) };
+  } finally {
+    isRunning = false;
+  }
+}
+
+// Restore from a backup_logs row, using the local file or the user's Drive copy.
+// NOTE: log lookup happens BEFORE restoring, because the restore replaces backup_logs too.
+async function restoreFromLog(logId, source, userId) {
+  const log = await BackupLog.findByPk(logId);
+  if (!log) throw new Error("Backup not found");
+  if (log.status !== "success") throw new Error("This backup is not valid for restore");
+
+  const filename = path.basename(log.filename); // prevent path traversal
+  const localPath = path.join(BACKUP_DIR, filename);
+
+  if (source === "drive") {
+    fs.mkdirSync(TMP_DIR, { recursive: true });
+    const tmpPath = path.join(TMP_DIR, `drive-${stamp()}-${filename}`);
+    try {
+      await drive.downloadFile(userId, filename, tmpPath); // see note above
+      return await restoreFromPath(tmpPath);
+    } finally {
+      fs.rmSync(tmpPath, { force: true });
+    }
+  }
+
+  return restoreFromPath(localPath);
+}
+
+// Restore from an uploaded file (multer temp path). The temp file is always removed.
+async function restoreFromUpload(tmpPath) {
+  try {
+    return await restoreFromPath(tmpPath);
+  } finally {
+    fs.rmSync(tmpPath, { force: true });
+  }
+}
+
+async function getLocalStats() {
+  if (!fs.existsSync(BACKUP_DIR)) return { count: 0, size: 0 };
+  const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith(EXT));
+  const size = files.reduce((s, f) => s + fs.statSync(path.join(BACKUP_DIR, f)).size, 0);
+  return { count: files.length, size };
+}
+
+// Daily at 02:00, uploads to every connected user's Drive
+function startScheduler() {
+  cron.schedule(process.env.BACKUP_CRON || "0 2 * * *", async () => {
+    try {
+      await runBackup(await drive.getConnectedUserIds());
+    } catch (e) {
+      console.error("Scheduled backup failed:", e.message);
+    }
   });
-  console.log('[Backup] Hourly change-check cron started.');
 }
 
 module.exports = {
-  checkAndBackup, // exposed so you can also call this from a manual "Sauvegarder maintenant" button
-  startBackupCron,
-  // NEW exports — additive only, nothing above this line changed behavior:
-  LOCAL_BACKUP_DIR,
-  MAX_LOCAL_BACKUPS,
-  isGoogleDriveConnected,
-  getLastDriveUploadDate,
-  getUploadedFileNames,
+  runBackup,
+  restoreFromLog,
+  restoreFromUpload,
+  getLocalStats,
+  startScheduler,
+  RETENTION,
+  TMP_DIR,
 };

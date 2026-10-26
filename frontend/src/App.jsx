@@ -19,6 +19,7 @@ import Competitions from './pages/Competitions.jsx';
 import useFavicon from './hooks/useFavicon.js';
 import { useEffect } from 'react';
 import { assetUrl } from './api/Api.js';
+import Reports from './pages/Reports.jsx';
 
 function RequireAuth({ children }) {
   const { isAuth, authLoading } = useStore();
@@ -74,6 +75,7 @@ useEffect(() => {
         <Route path="/absences" element={<Absences />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/donations" element={<Donations />} />
+        <Route path="/report" element={<Reports />} />
         <Route path="/competitions" element={<Competitions />} />
         <Route path="/backup" element={<BackupPage />} />
         <Route 

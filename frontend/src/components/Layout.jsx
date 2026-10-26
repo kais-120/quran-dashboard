@@ -16,6 +16,7 @@ import {
   FaGraduationCap,
   FaUserCog,
   FaTrophy,
+  FaFileDownload,
 } from "react-icons/fa";
 import { assetUrl } from '../api/Api.js';
 
@@ -31,6 +32,7 @@ const NAV = [
   { to: "/courses", label: "الدورات", icon: FaGraduationCap },
   { to: "/absences", label: "الغيابات", icon: FaUserClock },
   { to: "/expenses", label: "المصاريف", icon: FaMoneyBillWave },
+  { to: "report", label: "التقارير", icon: FaFileDownload },
   {
     to: "/donations",
     label: "التبرعات",
