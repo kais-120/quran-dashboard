@@ -15,8 +15,10 @@ const SubscriptionRoutes = require("./routes/SubscriptionRoutes")
 const DashboardRoutes = require("./routes/DashboardRoutes")
 const TeacherPaymentRoutes = require("./routes/TeacherPaymentRoutes")
 const UserRoutes = require("./routes/UserRoutes")
-const BackupRoute = require("./routes/BackupRoute")
+const BackupRoutes = require("./routes/BackupRoutes")
 const CompetitionRoutes = require('./routes/CompetitionRoutes')
+const ReportRoutes = require('./routes/ReportRoutes')
+
 
 
 router.use("/auth",AuthRouter);
@@ -34,9 +36,10 @@ router.use("/subscription", SubscriptionRoutes);
 router.use("/dashboard", DashboardRoutes);
 router.use("/teacher-payment", TeacherPaymentRoutes);
 router.use("/user", UserRoutes);
-router.use("/backup", BackupRoute);
+router.use("/backup", BackupRoutes);
 router.use('/competitions',CompetitionRoutes);
-app.use('/api/reports', /* authMiddleware, */ require('./routes/reportRoutes'));
+router.use('/reports',ReportRoutes);
+
 
 
 

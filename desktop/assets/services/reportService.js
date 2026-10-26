@@ -4,8 +4,18 @@ const puppeteer = require('puppeteer');
 const { QueryTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
+// ---- match your site's palette here (copy from your CSS variables) ----
+const THEME = {
+  primary: '#1f6f4a',
+  primarySoft: '#eef5f0',
+  border: '#d9e3dc',
+  text: '#1c2a22',
+  muted: '#667',
+  cardBg: '#f6faf7',
+};
+
 // adjust to your real tables / columns
-const STUDENT_NAME = "CONCAT(st.first_name, ' ', st.last_name)";
+const STUDENT_NAME = "CONCAT(name)";
 const TEACHER_NAME = "CONCAT(t.first_name, ' ', t.last_name)";
 
 const MONTHS = [
@@ -25,15 +35,24 @@ const num = (v) => Number(v || 0);
 const fmt = (v) => num(v).toFixed(3);
 
 /* ---------------------------------------------------------------
-   1) Periods that actually exist in the database
+   1) Periods that actually exist in the database (PostgreSQL)
 ---------------------------------------------------------------- */
 async function getPeriods() {
   const rows = await q(
     `SELECT y, m FROM (
-       SELECT YEAR(date) AS y, MONTH(date) AS m FROM donations
-       UNION SELECT YEAR(date), MONTH(date) FROM expenses
-       UNION SELECT CAST(year AS UNSIGNED), CAST(month AS UNSIGNED) FROM subscription_payment
-       UNION SELECT CAST(year AS UNSIGNED), CAST(month AS UNSIGNED) FROM teacher_payment
+       SELECT CAST(EXTRACT(YEAR FROM date) AS integer) AS y,
+              CAST(EXTRACT(MONTH FROM date) AS integer) AS m
+         FROM donations
+       UNION
+       SELECT CAST(EXTRACT(YEAR FROM date) AS integer),
+              CAST(EXTRACT(MONTH FROM date) AS integer)
+         FROM expenses
+       UNION
+       SELECT CAST(year AS integer), CAST(month AS integer)
+         FROM subscription_payment
+       UNION
+       SELECT CAST(year AS integer), CAST(month AS integer)
+         FROM teacher_payment
      ) t
      WHERE y IS NOT NULL AND m BETWEEN 1 AND 12
      ORDER BY y DESC, m ASC`
@@ -57,44 +76,48 @@ async function getPeriods() {
    2) Report data
 ---------------------------------------------------------------- */
 async function loadData(year, month) {
-  const r = { y: year, m: month || null };
+  const r = month ? { y: year, m: month } : { y: year };
+  const mSp = month ? 'AND CAST(sp.month AS integer) = :m' : '';
+  const mTp = month ? 'AND CAST(tp.month AS integer) = :m' : '';
+  const mDate = month ? 'AND EXTRACT(MONTH FROM date) = :m' : '';
 
   const [subs, teachers, expenses, donations] = await Promise.all([
     q(
-      `SELECT sp.amount, sp.status, CAST(sp.month AS UNSIGNED) AS m,
-              DATE_FORMAT(sp.date_payment, '%Y-%m-%d') AS d,
+      `SELECT sp.amount, sp.status, CAST(sp.month AS integer) AS m,
+              to_char(sp.date_payment, 'YYYY-MM-DD') AS d,
               ${STUDENT_NAME} AS name
          FROM subscription_payment sp
          JOIN subscriptions s ON s.id = sp.subscription_id
          JOIN students st ON st.id = s.student_id
-        WHERE CAST(sp.year AS UNSIGNED) = :y
-          AND (:m IS NULL OR CAST(sp.month AS UNSIGNED) = :m)
+        WHERE CAST(sp.year AS integer) = :y ${mSp}
         ORDER BY sp.date_payment`,
       r
     ),
     q(
-      `SELECT tp.amount, CAST(tp.month AS UNSIGNED) AS m,
-              DATE_FORMAT(tp.date_payment, '%Y-%m-%d') AS d,
+      `SELECT tp.amount, CAST(tp.month AS integer) AS m,
+              to_char(tp.date_payment, 'YYYY-MM-DD') AS d,
               ${TEACHER_NAME} AS name
          FROM teacher_payment tp
          JOIN teachers t ON t.id = tp.teacher_id
-        WHERE CAST(tp.year AS UNSIGNED) = :y
-          AND (:m IS NULL OR CAST(tp.month AS UNSIGNED) = :m)
+        WHERE CAST(tp.year AS integer) = :y ${mTp}
         ORDER BY tp.date_payment`,
       r
     ),
     q(
-      `SELECT title, amount, MONTH(date) AS m, DATE_FORMAT(date, '%Y-%m-%d') AS d, note
+      `SELECT title, amount,
+              CAST(EXTRACT(MONTH FROM date) AS integer) AS m,
+              to_char(date, 'YYYY-MM-DD') AS d, note
          FROM expenses
-        WHERE YEAR(date) = :y AND (:m IS NULL OR MONTH(date) = :m)
+        WHERE EXTRACT(YEAR FROM date) = :y ${mDate}
         ORDER BY date`,
       r
     ),
     q(
       `SELECT donor_type, donor_name, kind, amount, item, quantity,
-              MONTH(date) AS m, DATE_FORMAT(date, '%Y-%m-%d') AS d
+              CAST(EXTRACT(MONTH FROM date) AS integer) AS m,
+              to_char(date, 'YYYY-MM-DD') AS d
          FROM donations
-        WHERE YEAR(date) = :y AND (:m IS NULL OR MONTH(date) = :m)
+        WHERE EXTRACT(YEAR FROM date) = :y ${mDate}
         ORDER BY date`,
       r
     ),
@@ -115,7 +138,6 @@ function summarize({ subs, teachers, expenses, donations }) {
   const income = paid + donationsTotal;
   const outgoing = expensesTotal + teachersTotal;
 
-  // per-month breakdown (only months that have data)
   const by = {};
   const add = (m, k, v) => {
     const key = Number(m);
@@ -131,6 +153,12 @@ function summarize({ subs, teachers, expenses, donations }) {
     paid, donationsTotal, expensesTotal, teachersTotal,
     income, outgoing, balance: income - outgoing, by,
   };
+}
+
+// light version used by the page preview
+async function getSummary(year, month) {
+  const { by, ...totals } = summarize(await loadData(year, month));
+  return totals;
 }
 
 /* ---------------------------------------------------------------
@@ -162,6 +190,7 @@ const table = (headers, rows, empty) =>
 function buildHtml({ year, month, title, cur }, data, s) {
   const money = (v) => `${fmt(v)} ${cur}`;
   const periodLabel = month ? `${MONTHS[month - 1]} ${year}` : `سنة ${year}`;
+  const kind = month ? 'تقرير شهري' : 'تقرير سنوي';
 
   const card = (label, value, cls = '') =>
     `<div class="card ${cls}"><span>${esc(label)}</span><b>${esc(money(value))}</b></div>`;
@@ -225,26 +254,26 @@ function buildHtml({ year, month, title, cur }, data, s) {
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
   ${fontCss()}
   *{box-sizing:border-box}
-  body{font-family:'Cairo',sans-serif;color:#1c2a22;font-size:12px;margin:0}
-  .head{border-bottom:3px solid #1f6f4a;padding-bottom:8px;margin-bottom:14px}
-  .head h1{margin:0;font-size:22px;color:#1f6f4a}
-  .head p{margin:2px 0 0;color:#667}
+  body{font-family:'Cairo',sans-serif;color:${THEME.text};font-size:12px;margin:0}
+  .head{border-bottom:3px solid ${THEME.primary};padding-bottom:8px;margin-bottom:14px}
+  .head h1{margin:0;font-size:22px;color:${THEME.primary}}
+  .head p{margin:2px 0 0;color:${THEME.muted}}
   .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
-  .card{border:1px solid #d9e3dc;border-radius:8px;padding:8px 10px;background:#f6faf7}
-  .card span{display:block;color:#667;font-size:11px}
+  .card{border:1px solid ${THEME.border};border-radius:8px;padding:8px 10px;background:${THEME.cardBg}}
+  .card span{display:block;color:${THEME.muted};font-size:11px}
   .card b{font-size:14px}
-  .card.total{background:#1f6f4a;color:#fff;border-color:#1f6f4a}
-  .card.total span{color:#d7efe2}
-  h2{font-size:14px;margin:16px 0 6px;color:#1f6f4a;break-after:avoid}
+  .card.total{background:${THEME.primary};color:#fff;border-color:${THEME.primary}}
+  .card.total span{color:#e6f4ec}
+  h2{font-size:14px;margin:16px 0 6px;color:${THEME.primary};break-after:avoid}
   table{width:100%;border-collapse:collapse}
-  th,td{border:1px solid #d9e3dc;padding:5px 7px;text-align:right}
-  th{background:#eef5f0}
+  th,td{border:1px solid ${THEME.border};padding:5px 7px;text-align:right}
+  th{background:${THEME.primarySoft}}
   tr{break-inside:avoid}
   .empty{color:#889;margin:4px 0}
 </style></head><body>
   <div class="head">
     <h1>${esc(title || 'تقرير الجمعية')}</h1>
-    <p>التقرير المالي — ${esc(periodLabel)}</p>
+    <p>${kind} — ${esc(periodLabel)}</p>
   </div>
   <div class="cards">
     ${card('اشتراكات محصّلة', s.paid)}
@@ -301,4 +330,4 @@ async function buildReportPdf({ year, month, title = '', cur = '' }) {
   }
 }
 
-module.exports = { getPeriods, buildReportPdf };
+module.exports = { getPeriods, getSummary, buildReportPdf };
